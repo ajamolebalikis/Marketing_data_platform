@@ -1,0 +1,52 @@
+name: CI (pull request)
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.event.number }}
+  cancel-in-progress: true
+
+env:
+  DBT_PROFILES_DIR: .
+  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+  DATABRICKS_TOKEN_CI: ${{ secrets.DATABRICKS_TOKEN_CI }}
+  PR_NUMBER: ${{ github.event.number }}      # -> schemas pr_<n>_* in catalog ci_development
+
+jobs:
+  dbt-ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+      - run: dbt deps
+
+      - name: Parse (fast fail on syntax / ref errors)
+        run: dbt parse --target ci
+
+      - name: Seed + build + test everything in an isolated PR schema
+        run: |
+          dbt seed --target ci
+          dbt run --select elementary --target ci
+          dbt build --target ci --fail-fast
+
+      - name: Generate dbt docs (static HTML)
+        run: dbt docs generate --static --target ci
+
+      - name: Upload docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: dbt-docs-pr-${{ github.event.number }}
+          path: target/static_index.html
+
+      - name: Clean up PR schemas
+        if: always()
+        run: dbt run-operation drop_ci_schemas --target ci

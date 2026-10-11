@@ -1,0 +1,23 @@
+version: 2
+
+models:
+  - name: int_facebook_ad_performance
+    description: "Ephemeral. Facebook ad x day performance joined to ad/ad group/campaign/account attributes."
+  - name: int_snapchat_ad_performance
+    description: "Ephemeral. Snapchat ad x day x country performance joined to ad/ad group/campaign attributes."
+  - name: int_marketing_ads
+    description: >
+      Unified Facebook + Snapchat performance. **Grain: one row per platform x ad x day x country**
+      (country is NULL for Facebook). Adds surrogate keys and converts spend to EUR.
+    columns:
+      - name: ad_performance_key
+        description: Surrogate primary key (platform, ad_id, report_date, country).
+        data_tests: [unique, not_null]
+      - name: platform
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [facebook, snapchat]
+      - name: spend_eur
+        description: spend converted to EUR with the currency_rates seed. NULL only if a currency has no rate.
+        data_tests: [not_null]

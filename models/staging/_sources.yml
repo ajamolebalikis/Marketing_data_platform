@@ -1,0 +1,45 @@
+version: 2
+
+sources:
+  - name: marketing_raw
+    description: >
+      Raw advertising exports from Facebook Ads and Snapchat Ads, loaded as-is from CSV into
+      Unity Catalog (bronze). Never modified by dbt; staging models are the only readers.
+    database: "{{ env_var('RAW_CATALOG', 'bronze_production') }}"
+    schema: "{{ var('raw_schema') }}"
+    loaded_at_field: _loaded_at
+    freshness:
+      warn_after: {count: 7, period: day}
+    tables:
+      - name: fb_ads_stats
+        description: "Facebook daily ad performance. One row per ad per day."
+        columns:
+          - name: ad_id
+            description: Facebook ad id.
+            data_tests: [not_null]
+          - name: ad_date
+            description: Calendar date of the performance row.
+            data_tests: [not_null]
+      - name: fb_ads
+        description: "Facebook ad dimension (ad -> campaign, ad group, account)."
+        columns:
+          - name: ad_id
+            data_tests: [not_null]
+      - name: fb_campaigns
+        description: "Facebook campaign names."
+      - name: fb_ad_groups
+        description: "Facebook ad group (ad set) names."
+      - name: fb_accounts
+        description: "Facebook ad accounts with their billing currency."
+      - name: snap_ads_stats
+        description: "Snapchat daily ad performance. One row per ad, per day, per country."
+        columns:
+          - name: ad_detail_id
+            description: Snapchat ad id (UUID). Joins to snap_ads.ad_id.
+            data_tests: [not_null]
+      - name: snap_ads
+        description: "Snapchat ad history (ad -> ad group). May contain several versions per ad."
+      - name: snap_ad_groups
+        description: "Snapchat ad group history (ad group -> campaign). May contain several versions per ad group."
+      - name: snap_campaigns
+        description: "Snapchat campaign history (campaign -> account)."

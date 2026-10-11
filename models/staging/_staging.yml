@@ -1,0 +1,122 @@
+version: 2
+
+models:
+  - name: stg_facebook_ad_stats
+    description: >
+      Cleaned Facebook performance. **Grain: one row per ad per day** (ad_id, report_date).
+      NULL impressions/clicks are coalesced to 0 (Facebook omits zeros); is_clicks_imputed marks rows where this happened.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ad_id, report_date]
+    columns:
+      - name: ad_id
+        description: Facebook ad id (string).
+        data_tests: [not_null]
+      - name: account_id
+        description: Facebook ad account id.
+        data_tests: [not_null]
+      - name: report_date
+        description: Date the performance occurred.
+        data_tests: [not_null]
+      - name: spend
+        description: Amount spent in the ad account currency (see stg_facebook_accounts.currency_code).
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0}
+      - name: impressions
+        description: Number of times the ad was shown. Never NULL.
+        data_tests:
+          - dbt_utils.accepted_range: {min_value: 0}
+      - name: clicks
+        description: Number of clicks. NULL in source is treated as 0.
+        data_tests:
+          - dbt_utils.accepted_range: {min_value: 0}
+      - name: is_clicks_imputed
+        description: True when source clicks was NULL and was set to 0.
+
+  - name: stg_facebook_ads
+    description: "Facebook ads. **Grain: one row per ad_id** (latest version)."
+    columns:
+      - name: ad_id
+        data_tests: [unique, not_null]
+      - name: campaign_id
+        data_tests: [not_null]
+      - name: ad_status
+        description: Normalised upper-case status.
+        data_tests:
+          - accepted_values:
+              values: [ACTIVE, PAUSED, ARCHIVED, DELETED]
+
+  - name: stg_facebook_campaigns
+    description: "Facebook campaigns. **Grain: one row per campaign_id**."
+    columns:
+      - name: campaign_id
+        data_tests: [unique, not_null]
+
+  - name: stg_facebook_ad_groups
+    description: "Facebook ad groups. **Grain: one row per ad_group_id**."
+    columns:
+      - name: ad_group_id
+        data_tests: [unique, not_null]
+
+  - name: stg_facebook_accounts
+    description: "Facebook ad accounts. **Grain: one row per account_id**. Carries the billing currency."
+    columns:
+      - name: account_id
+        data_tests: [unique, not_null]
+      - name: currency_code
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [EUR, USD]
+
+  - name: stg_snapchat_ad_stats
+    description: >
+      Cleaned Snapchat performance. **Grain: one row per ad, per day, per country.**
+      Spend currency is on the row itself.
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [ad_id, report_date, country]
+    columns:
+      - name: ad_id
+        description: Snapchat ad id (UUID; renamed from ad_detail_id).
+        data_tests: [not_null]
+      - name: country
+        description: Upper-case ISO country code of the audience.
+        data_tests: [not_null]
+      - name: currency_code
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [EUR, USD]
+      - name: spend
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0}
+      - name: impressions
+        data_tests:
+          - dbt_utils.accepted_range: {min_value: 0}
+      - name: clicks
+        description: Clicks; NULL in source treated as 0 (see is_clicks_imputed).
+        data_tests:
+          - dbt_utils.accepted_range: {min_value: 0}
+
+  - name: stg_snapchat_ads
+    description: "Snapchat ads. **Grain: one row per ad_id** (latest version of the history table)."
+    columns:
+      - name: ad_id
+        data_tests: [unique, not_null]
+
+  - name: stg_snapchat_ad_groups
+    description: "Snapchat ad groups. **Grain: one row per ad_group_id** (latest version)."
+    columns:
+      - name: ad_group_id
+        data_tests: [unique, not_null]
+      - name: campaign_id
+        data_tests: [not_null]
+
+  - name: stg_snapchat_campaigns
+    description: "Snapchat campaigns. **Grain: one row per campaign_id**."
+    columns:
+      - name: campaign_id
+        data_tests: [unique, not_null]

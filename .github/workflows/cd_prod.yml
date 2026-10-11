@@ -1,0 +1,61 @@
+name: CD (production)
+
+on:
+  push:
+    branches: [main]          # runs after a PR is merged
+  schedule:
+    - cron: "0 5 * * *"       # daily refresh, 05:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: prod-run
+  cancel-in-progress: false   # never kill a running production build
+
+env:
+  DBT_PROFILES_DIR: .
+  DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
+  # Service Principal (OAuth M2M). No personal access token anywhere in production.
+  DATABRICKS_CLIENT_ID: ${{ secrets.DATABRICKS_CLIENT_ID }}
+  DATABRICKS_CLIENT_SECRET: ${{ secrets.DATABRICKS_CLIENT_SECRET }}
+
+jobs:
+  dbt-prod:
+    runs-on: ubuntu-latest
+    environment: production     # add required reviewers in repo Settings -> Environments if you want approval
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+      - run: dbt deps
+
+      - name: Check raw data freshness
+        run: dbt source freshness --target prod
+        continue-on-error: true
+
+      - name: Build production
+        run: |
+          dbt seed --target prod
+          dbt run --select elementary --target prod
+          dbt build --target prod
+
+      - name: Generate dbt docs (static HTML)
+        run: dbt docs generate --static --target prod
+
+      - name: Generate Elementary observability report
+        if: always()
+        run: edr report --profiles-dir . --profile-target prod --target-path edr_target
+
+      - name: Upload docs + Elementary report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-docs-and-observability
+          path: |
+            target/static_index.html
+            edr_target/elementary_report.html

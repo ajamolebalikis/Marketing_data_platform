@@ -1,0 +1,40 @@
+name: marketing_platform
+version: "1.0.0"
+config-version: 2
+profile: marketing_platform
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+analysis-paths: ["analyses"]
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  # Where the raw (bronze) tables live. Same raw data is read by dev, ci and prod.
+  raw_schema: marketing_raw
+  # Incremental fact re-processes the last N days per platform to catch late-arriving data.
+  incremental_lookback_days: 3
+
+models:
+  marketing_platform:
+    +persist_docs:
+      relation: true
+      columns: true
+    staging:
+      +materialized: view          # cheap, always fresh, 1:1 with source
+      +schema: staging
+    intermediate:
+      +materialized: view          # the two platform models are overridden to ephemeral
+      +schema: intermediate
+    marts:
+      +materialized: table
+      +schema: marts
+      +file_format: delta
+  elementary:
+    +schema: elementary            # Elementary's own metadata tables live in their own schema
+
+seeds:
+  marketing_platform:
+    +schema: reference
+    +file_format: delta

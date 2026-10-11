@@ -1,0 +1,15 @@
+target/
+dbt_packages/
+logs/
+.env
+.venv/
+edr_target/
+__pycache__/
+.DS_Store
+
+*.log
+elementary_output.json
+.user.yml
+*.log
+elementary_output.json
+.user.yml

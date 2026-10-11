@@ -1,0 +1,152 @@
+version: 2
+
+models:
+  - name: fct_marketing_spend
+    description: >
+      **Main analytical model.** Unified Facebook + Snapchat ad performance for spend, impressions, clicks, CTR, CPC and CPM.
+      {{ doc('fct_grain') }}
+      Incremental (merge) with a per-platform watermark and a 3-day lookback.
+      Use `spend_eur` to compare platforms. Facebook data covers 2025, Snapchat data covers 2024.
+    data_tests:
+      - dbt_utils.expression_is_true:
+          expression: "clicks <= impressions"
+      - elementary.schema_changes:
+          config:
+            severity: warn
+      - elementary.volume_anomalies:
+          timestamp_column: report_date
+          days_back: 365
+          config:
+            severity: warn
+    columns:
+      - name: ad_performance_key
+        description: Surrogate primary key.
+        data_tests: [unique, not_null]
+      - name: report_date
+        description: Date the ad performance occurred.
+        data_tests:
+          - not_null
+      - name: platform
+        description: Advertising platform. Either `facebook` or `snapchat`.
+        data_tests:
+          - not_null
+          - accepted_values:
+              values: [facebook, snapchat]
+      - name: country
+        description: Upper-case ISO country code (Snapchat only; NULL for Facebook).
+      - name: account_id
+        description: Platform ad account id.
+      - name: account_name
+        description: Ad account name (Facebook only).
+      - name: campaign_key
+        description: Surrogate key of (platform, campaign_id). Joins to dim_campaign.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_campaign')
+              field: campaign_key
+      - name: campaign_id
+        description: Platform-native campaign id.
+      - name: campaign_name
+        description: Campaign name as defined in the platform.
+      - name: ad_group_id
+        description: Platform-native ad group (ad set) id.
+      - name: ad_group_name
+        description: Ad group name.
+      - name: ad_key
+        description: Surrogate key of (platform, ad_id). Joins to dim_ad.
+        data_tests:
+          - not_null
+          - relationships:
+              to: ref('dim_ad')
+              field: ad_key
+      - name: ad_id
+        description: Platform-native ad id (string).
+      - name: ad_name
+        description: Ad / creative name.
+      - name: ad_status
+        description: Ad status (Facebook only).
+      - name: currency_code
+        description: Currency of the `spend` column (ISO 4217).
+      - name: spend
+        description: Spend in the original account currency. Do not sum across currencies.
+        data_tests:
+          - dbt_utils.accepted_range: {min_value: 0}
+      - name: spend_eur
+        description: "{{ doc('spend_eur_doc') }}"
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0}
+      - name: impressions
+        description: Number of impressions (>= 0). NULLs in source are 0.
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0}
+      - name: clicks
+        description: Number of clicks (>= 0). NULLs in source are 0 (see is_clicks_imputed).
+        data_tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0}
+      - name: ctr
+        description: "{{ doc('metric_ctr') }}"
+      - name: cpc_eur
+        description: "{{ doc('metric_cpc') }}"
+      - name: cpm_eur
+        description: "{{ doc('metric_cpm') }}"
+      - name: is_clicks_imputed
+        description: True when the source clicks value was NULL and was set to 0.
+      - name: _dbt_loaded_at
+        description: Timestamp when dbt wrote the row.
+
+  - name: dim_campaign
+    description: "Campaign dimension. **Grain: one row per platform x campaign_id** that has at least one performance row."
+    columns:
+      - name: campaign_key
+        data_tests: [unique, not_null]
+      - name: platform
+        data_tests:
+          - accepted_values:
+              values: [facebook, snapchat]
+      - name: campaign_id
+        data_tests: [not_null]
+      - name: campaign_name
+        description: Campaign name from the platform.
+
+  - name: dim_ad
+    description: "Ad / creative dimension. **Grain: one row per platform x ad_id** that has performance rows."
+    columns:
+      - name: ad_key
+        data_tests: [unique, not_null]
+      - name: ad_name
+        description: Ad / creative name.
+
+  - name: marketing_daily_campaign
+    description: >
+      BI/AI-friendly aggregate. **Grain: one row per day x platform x campaign.**
+      Best entry point for questions like "spend last month" or "top campaigns by clicks".
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [report_date, platform, campaign_key]
+    columns:
+      - name: report_date
+        data_tests: [not_null]
+      - name: report_month
+        description: First day of the month of report_date.
+      - name: platform
+        data_tests:
+          - accepted_values:
+              values: [facebook, snapchat]
+      - name: spend_eur
+        description: "{{ doc('spend_eur_doc') }}"
+        data_tests:
+          - dbt_utils.accepted_range: {min_value: 0}
+      - name: impressions
+        description: Sum of impressions.
+      - name: clicks
+        description: Sum of clicks.
+      - name: ctr
+        description: "{{ doc('metric_ctr') }}"
+      - name: cpc_eur
+        description: "{{ doc('metric_cpc') }}"
+      - name: cpm_eur
+        description: "{{ doc('metric_cpm') }}"
